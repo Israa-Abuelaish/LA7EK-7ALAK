@@ -11,11 +11,11 @@ app.use(cors());
 const adminRoutes = require('./routes/adminRoutes'); 
 app.use('/api', adminRoutes);
 
-//  1: Auth APIs (مسارات المصادقة والتسجيل)
+//  Auth APIs (مسارات المصادقة والتسجيل)
 const authRoutes = require('./routes/authRoutes');
 app.use('/api', authRoutes);
 
-// 2: Story APIs (مسارات القصص المؤقتة)
+//  Story APIs (مسارات القصص المؤقتة)
 const storyRoutes = require('./routes/storyRoutes');
 app.use('/api/stories', storyRoutes);
 

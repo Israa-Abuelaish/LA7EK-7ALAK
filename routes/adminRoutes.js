@@ -100,81 +100,12 @@ router.post('/login', async (req, res) => {
 });
 
 
-// // ==========================================
-// // 2. PASSWORD RECOVERY (استعادة كلمة المرور عبر OTP)
-// // ==========================================
 
-// // أ) إرسال رمز الـ OTP إلى البريد
-// router.post('/forgot-password', async (req, res) => {
-//   try {
-//     const { email } = req.body;
-//     const user = await prisma.user.findUnique({ where: { email } });
-    
-//     if (!user) {
-//       return res.status(404).json({ error: 'البريد الإلكتروني غير مسجل لدينا' });
-//     }
 
-//     const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
-//     const tokenExpiry = new Date(Date.now() + 10 * 60 * 1000); // صالح لـ 10 دقائق
-
-//     await prisma.user.update({
-//       where: { email },
-//       data: { resetToken, tokenExpiry }
-//     });
-
-//     await transporter.sendMail({
-//       from: '"تطبيق لحّق حالك" <support@la7ek7alak.com>',
-//       to: email,
-//       subject: 'رمز استعادة كلمة المرور',
-//       html: `<div dir="rtl"><h3>رمز التحقق الخاص بك هو:</h3><h2>${resetToken}</h2><p>صالحة لمدة 10 دقائق فقط.</p></div>`
-//     });
-
-//     res.status(200).json({ message: 'تم إرسال رمز التحقق إلى بريدك الإلكتروني بنجاح' });
-//   } catch (error) {
-//     res.status(500).json({ error: 'فشل إرسال البريد', details: error.message });
-//   }
-// });
-
-// // ب) التحقق من صحة الرمز (OTP)
-// router.post('/verify-otp', async (req, res) => {
-//   try {
-//     const { email, otp } = req.body;
-//     const user = await prisma.user.findUnique({ where: { email } });
-
-//     if (!user || user.resetToken !== otp) {
-//       return res.status(400).json({ error: 'رمز التحقق غير صحيح' });
-//     }
-
-//     if (user.tokenExpiry && new Date() > new Date(user.tokenExpiry)) {
-//       return res.status(400).json({ error: 'انتهت صلاحية رمز التحقق' });
-//     }
-
-//     res.status(200).json({ success: true, message: 'تم التحقق من الرمز بنجاح' });
-//   } catch (error) {
-//     res.status(500).json({ error: 'خطأ أثناء التحقق', details: error.message });
-//   }
-// });
-
-// // ج) تعيين كلمة المرور الجديدة
-// router.post('/reset-password', async (req, res) => {
-//   try {
-//     const { email, newPassword } = req.body;
-//     const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-//     await prisma.user.update({
-//       where: { email },
-//       data: { password: hashedPassword, resetToken: null, tokenExpiry: null }
-//     });
-
-//     res.status(200).json({ message: 'تم تحديث كلمة المرور بنجاح' });
-//   } catch (error) {
-//     res.status(500).json({ error: 'فشل تحديث كلمة المرور', details: error.message });
-//   }
-// });
 
 
 // ==========================================
-// 3. ADMIN DASHBOARD (لوحة تحكم الأدمن)
+// 2. ADMIN DASHBOARD (لوحة تحكم الأدمن)
 // ==========================================
 
 // أ) تسجيل دخول الأدمن
