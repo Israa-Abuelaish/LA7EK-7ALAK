@@ -17,7 +17,6 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// سر الـ JWT (يفضل استخدامه من .env)
 const JWT_SECRET = process.env.JWT_SECRET || 'la7ek7alak_secret_key';
 
 // ==========================================
@@ -27,9 +26,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'la7ek7alak_secret_key';
 // تسجيل حساب جديد (مخصص للمستهلكين فقط - Customer)
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { fullName, email, password } = req.body;
 
-    if (!name || !email || !password) {
+    if (!fullName || !email || !password) {
       return res.status(400).json({ error: 'الرجاء إدخال جميع الحقول المطلوبة' });
     }
 
@@ -48,7 +47,7 @@ router.post('/register', async (req, res) => {
 
     const newUser = await prisma.user.create({
       data: {
-        name,
+        fullName,
         email,
         password: hashedPassword,
         role: 'customer' // مثبت دائماً كمستهلك
@@ -57,7 +56,7 @@ router.post('/register', async (req, res) => {
 
     res.status(201).json({
       message: 'تم إنشاء الحساب بنجاح',
-      user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role }
+      user: { id: newUser.id, fullName: newUser.fullName, email: newUser.email, role: newUser.role }
     });
   } catch (error) {
     res.status(500).json({ error: 'فشل إنشاء الحساب', details: error.message });
@@ -93,7 +92,7 @@ router.post('/login', async (req, res) => {
     res.status(200).json({
       message: 'تم تسجيل الدخول بنجاح',
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role }
+      user: { id: user.id, fullName: user.fullName, email: user.email, role: user.role }
     });
   } catch (error) {
     res.status(500).json({ error: 'خطأ في تسجيل الدخول', details: error.message });
@@ -101,77 +100,77 @@ router.post('/login', async (req, res) => {
 });
 
 
-// ==========================================
-// 2. PASSWORD RECOVERY (استعادة كلمة المرور عبر OTP)
-// ==========================================
+// // ==========================================
+// // 2. PASSWORD RECOVERY (استعادة كلمة المرور عبر OTP)
+// // ==========================================
 
-// أ) إرسال رمز الـ OTP إلى البريد
-router.post('/forgot-password', async (req, res) => {
-  try {
-    const { email } = req.body;
-    const user = await prisma.user.findUnique({ where: { email } });
+// // أ) إرسال رمز الـ OTP إلى البريد
+// router.post('/forgot-password', async (req, res) => {
+//   try {
+//     const { email } = req.body;
+//     const user = await prisma.user.findUnique({ where: { email } });
     
-    if (!user) {
-      return res.status(404).json({ error: 'البريد الإلكتروني غير مسجل لدينا' });
-    }
+//     if (!user) {
+//       return res.status(404).json({ error: 'البريد الإلكتروني غير مسجل لدينا' });
+//     }
 
-    const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
-    const tokenExpiry = new Date(Date.now() + 10 * 60 * 1000); // صالح لـ 10 دقائق
+//     const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+//     const tokenExpiry = new Date(Date.now() + 10 * 60 * 1000); // صالح لـ 10 دقائق
 
-    await prisma.user.update({
-      where: { email },
-      data: { resetToken, tokenExpiry }
-    });
+//     await prisma.user.update({
+//       where: { email },
+//       data: { resetToken, tokenExpiry }
+//     });
 
-    await transporter.sendMail({
-      from: '"تطبيق لحّق حالك" <support@la7ek7alak.com>',
-      to: email,
-      subject: 'رمز استعادة كلمة المرور',
-      html: `<div dir="rtl"><h3>رمز التحقق الخاص بك هو:</h3><h2>${resetToken}</h2><p>صالحة لمدة 10 دقائق فقط.</p></div>`
-    });
+//     await transporter.sendMail({
+//       from: '"تطبيق لحّق حالك" <support@la7ek7alak.com>',
+//       to: email,
+//       subject: 'رمز استعادة كلمة المرور',
+//       html: `<div dir="rtl"><h3>رمز التحقق الخاص بك هو:</h3><h2>${resetToken}</h2><p>صالحة لمدة 10 دقائق فقط.</p></div>`
+//     });
 
-    res.status(200).json({ message: 'تم إرسال رمز التحقق إلى بريدك الإلكتروني بنجاح' });
-  } catch (error) {
-    res.status(500).json({ error: 'فشل إرسال البريد', details: error.message });
-  }
-});
+//     res.status(200).json({ message: 'تم إرسال رمز التحقق إلى بريدك الإلكتروني بنجاح' });
+//   } catch (error) {
+//     res.status(500).json({ error: 'فشل إرسال البريد', details: error.message });
+//   }
+// });
 
-// ب) التحقق من صحة الرمز (OTP)
-router.post('/verify-otp', async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-    const user = await prisma.user.findUnique({ where: { email } });
+// // ب) التحقق من صحة الرمز (OTP)
+// router.post('/verify-otp', async (req, res) => {
+//   try {
+//     const { email, otp } = req.body;
+//     const user = await prisma.user.findUnique({ where: { email } });
 
-    if (!user || user.resetToken !== otp) {
-      return res.status(400).json({ error: 'رمز التحقق غير صحيح' });
-    }
+//     if (!user || user.resetToken !== otp) {
+//       return res.status(400).json({ error: 'رمز التحقق غير صحيح' });
+//     }
 
-    if (user.tokenExpiry && new Date() > new Date(user.tokenExpiry)) {
-      return res.status(400).json({ error: 'انتهت صلاحية رمز التحقق' });
-    }
+//     if (user.tokenExpiry && new Date() > new Date(user.tokenExpiry)) {
+//       return res.status(400).json({ error: 'انتهت صلاحية رمز التحقق' });
+//     }
 
-    res.status(200).json({ success: true, message: 'تم التحقق من الرمز بنجاح' });
-  } catch (error) {
-    res.status(500).json({ error: 'خطأ أثناء التحقق', details: error.message });
-  }
-});
+//     res.status(200).json({ success: true, message: 'تم التحقق من الرمز بنجاح' });
+//   } catch (error) {
+//     res.status(500).json({ error: 'خطأ أثناء التحقق', details: error.message });
+//   }
+// });
 
-// ج) تعيين كلمة المرور الجديدة
-router.post('/reset-password', async (req, res) => {
-  try {
-    const { email, newPassword } = req.body;
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+// // ج) تعيين كلمة المرور الجديدة
+// router.post('/reset-password', async (req, res) => {
+//   try {
+//     const { email, newPassword } = req.body;
+//     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    await prisma.user.update({
-      where: { email },
-      data: { password: hashedPassword, resetToken: null, tokenExpiry: null }
-    });
+//     await prisma.user.update({
+//       where: { email },
+//       data: { password: hashedPassword, resetToken: null, tokenExpiry: null }
+//     });
 
-    res.status(200).json({ message: 'تم تحديث كلمة المرور بنجاح' });
-  } catch (error) {
-    res.status(500).json({ error: 'فشل تحديث كلمة المرور', details: error.message });
-  }
-});
+//     res.status(200).json({ message: 'تم تحديث كلمة المرور بنجاح' });
+//   } catch (error) {
+//     res.status(500).json({ error: 'فشل تحديث كلمة المرور', details: error.message });
+//   }
+// });
 
 
 // ==========================================
@@ -201,7 +200,7 @@ router.post('/admin/login', async (req, res) => {
 // ب) إنشاء تاجر ومتجر (حصرياً للأدمن)
 router.post('/admin/merchants', async (req, res) => {
   try {
-    const { name, email, password, storeName, categoryId, cityId } = req.body;
+    const { fullName, email, password, storeName, categoryId, cityId } = req.body;
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -209,7 +208,7 @@ router.post('/admin/merchants', async (req, res) => {
     const result = await prisma.$transaction(async (prisma) => {
       const newMerchant = await prisma.user.create({
         data: {
-          name,
+          fullName,
           email,
           password: hashedPassword,
           role: 'merchant' // مثبت كتاجر
@@ -284,7 +283,7 @@ router.patch('/admin/merchants/:id/status', async (req, res) => {
 
     res.status(200).json({
       message: 'تم تحديث حالة التاجر بنجاح',
-      data: { id: updatedMerchant.id, email: updatedMerchant.email, status: updatedMerchant.status }
+      data: { id: updatedMerchant.id, fullName: updatedMerchant.fullName, email: updatedMerchant.email, status: updatedMerchant.status }
     });
   } catch (error) {
     res.status(500).json({ error: 'فشل تحديث حالة التاجر', details: error.message });

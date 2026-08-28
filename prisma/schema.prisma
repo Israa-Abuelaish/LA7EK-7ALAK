@@ -10,9 +10,10 @@ generator client {
 // جدول المستخدمين (يشمل الزبائن، التجار، والأدمن)
 model User {
   id            Int      @id @default(autoincrement())
-  name          String
+  fullName      String
   email         String   @unique
   password      String
+  phone         String?      // اختياري
   role          String   @default("customer")
   status        String   @default("active")
   resetToken    String?         // لتخزين الرمز المؤقت
