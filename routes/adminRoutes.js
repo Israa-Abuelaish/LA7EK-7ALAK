@@ -142,6 +142,7 @@ router.post('/admin/merchants', async (req, res) => {
           fullName,
           email,
           password: hashedPassword,
+          phone: null,
           role: 'merchant' // مثبت كتاجر
         }
       });
