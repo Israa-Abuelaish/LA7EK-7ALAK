@@ -7,105 +7,24 @@ const nodemailer = require('nodemailer');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// إعداد Nodemailer (تأكد من وضع بيانات البريد الحقيقية أو متغيرات البيئة)
+// إعداد Nodemailer 
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.mailtrap.io',
-  port: process.env.EMAIL_PORT || 2525,
+  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.EMAIL_PORT) || 587,
+  secure: false, 
   auth: {
     user: process.env.EMAIL_USER || '',
     pass: process.env.EMAIL_PASS || ''
+  },
+  tls: {
+    rejectUnauthorized: false
   }
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'la7ek7alak_secret_key';
 
 // ==========================================
-// 1. AUTHENTICATION (المستهلكين وتطبيق الجوال)
-// ==========================================
-
-// تسجيل حساب جديد (مخصص للمستهلكين فقط - Customer)
-router.post('/register', async (req, res) => {
-  try {
-    const { fullName, email, password } = req.body;
-
-    if (!fullName || !email || !password) {
-      return res.status(400).json({ error: 'الرجاء إدخال جميع الحقول المطلوبة' });
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'صيغة البريد الإلكتروني غير صحيحة' });
-    }
-
-    // التحقق إن كان الإيميل مستخدماً مسبقاً
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ error: 'البريد الإلكتروني مستخدم بالفعل' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const newUser = await prisma.user.create({
-      data: {
-        fullName,
-        email,
-        password: hashedPassword,
-        role: 'customer' // مثبت دائماً كمستهلك
-      }
-    });
-
-    res.status(201).json({
-      message: 'تم إنشاء الحساب بنجاح',
-      user: { id: newUser.id, fullName: newUser.fullName, email: newUser.email, role: newUser.role }
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'فشل إنشاء الحساب', details: error.message });
-  }
-});
-
-// تسجيل الدخول المشترك (مستهلك أو تاجر)
-router.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'الرجاء إدخال البريد الإلكتروني وكلمة المرور' });
-    }
-
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      return res.status(400).json({ error: 'بيانات الدخول غير صحيحة' });
-    }
-
-    // التحقق من حالة الحساب (إذا كان التاجر موقوفاً)
-    if (user.status === 'inactive') {
-      return res.status(403).json({ error: 'حسابك موقوف حالياً، يرجى مراعاة الإدارة' });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'بيانات الدخول غير صحيحة' });
-    }
-
-    const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-
-    res.status(200).json({
-      message: 'تم تسجيل الدخول بنجاح',
-      token,
-      user: { id: user.id, fullName: user.fullName, email: user.email, role: user.role }
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'خطأ في تسجيل الدخول', details: error.message });
-  }
-});
-
-
-
-
-
-
-// ==========================================
-// 2. ADMIN DASHBOARD (لوحة تحكم الأدمن)
+// 1. ADMIN DASHBOARD (لوحة تحكم الأدمن)
 // ==========================================
 
 // أ) تسجيل دخول الأدمن
@@ -131,7 +50,11 @@ router.post('/admin/login', async (req, res) => {
 // ب) إنشاء تاجر ومتجر (حصرياً للأدمن)
 router.post('/admin/merchants', async (req, res) => {
   try {
-    const { fullName, email, password, storeName, categoryId, cityId } = req.body;
+    const { fullName, email, password, phone, storeName, categoryId, cityId } = req.body;
+
+    if (!fullName || !email || !password || !phone || !storeName || !categoryId || !cityId) {
+      return res.status(400).json({ error: 'الرجاء إدخال جميع الحقول المطلوبة للتاجر والمتجر' });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -142,8 +65,9 @@ router.post('/admin/merchants', async (req, res) => {
           fullName,
           email,
           password: hashedPassword,
-          phone: null,
-          role: 'merchant' // مثبت كتاجر
+          phone, 
+          role: 'merchant',
+          status: 'active'
         }
       });
 
@@ -167,6 +91,8 @@ router.post('/admin/merchants', async (req, res) => {
     res.status(500).json({ error: 'فشل إنشاء التاجر والمتجر', details: error.message });
   }
 });
+
+
 
 // ج) جلب قائمة التجار مع الفلترة
 router.get('/admin/merchants', async (req, res) => {
@@ -198,6 +124,7 @@ router.get('/admin/merchants', async (req, res) => {
   }
 });
 
+
 // د) تغيير حالة التاجر (تفعيل / إيقاف)
 router.patch('/admin/merchants/:id/status', async (req, res) => {
   try {
@@ -219,6 +146,99 @@ router.patch('/admin/merchants/:id/status', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'فشل تحديث حالة التاجر', details: error.message });
+  }
+});
+
+
+
+
+// GET /api/admin/filter-users: فلترة متقدمة للمستخدمين والتجار
+router.get('/admin/filter-users', async (req, res) => {
+  console.log("الـ Query المستلمة من الرابط:", req.query);
+  try {
+    const { role, status, cityId, categoryId, search } = req.query;
+
+    // بناء كائن الشروط الأساسي
+    let whereCondition = {};
+
+    // 1. فلترة حسب الدور (مثل 'customer' أو 'merchant' أو 'admin')
+    if (role) {
+      whereCondition.role = role;
+    }
+
+    // 2. فلترة حسب حالة الحساب (مثل 'active' أو 'inactive')
+    if (status) {
+      whereCondition.status = status;
+    }
+
+    // 3. فلترة نصية عامة (بالاسم أو البريد الإلكتروني)
+    if (search) {
+      whereCondition.OR = [
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    // 4. إذا كانت الفلترة تتعلق بالمتاجر (المدينة أو التصنيف)
+    if (cityId || categoryId) {
+      whereCondition.stores = {
+        some: {
+          ...(cityId && { cityId: parseInt(cityId) }),
+          ...(categoryId && { categoryId: parseInt(categoryId) })
+        }
+      };
+    }
+
+    // تنفيذ الاستعلام عبر Prisma مع جلب تفاصيل المتاجر إن وجدت
+   const results = await prisma.user.findMany({
+      where: whereCondition,
+      include: {
+        stores: {
+          include: {
+            city: true,
+            category: true 
+          }
+        }
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      count: results.length,
+      data: results
+    });
+
+  } catch (error) {
+    console.error("FILTER ERROR:", error);
+    res.status(500).json({ error: 'فشل عملية التصفية', details: error.message });
+  }
+});
+
+
+
+// حذف متجر معين بشكل مستقل
+router.delete('/admin/stores/:id', async (req, res) => {
+  try {
+    const storeId = parseInt(req.params.id);
+
+    const store = await prisma.store.findUnique({
+      where: { id: storeId }
+    });
+
+    if (!store) {
+      return res.status(404).json({ error: 'المتجر غير موجود' });
+    }
+
+    await prisma.store.delete({
+      where: { id: storeId }
+    });
+
+    res.status(200).json({
+      message: 'تم حذف المتجر بنجاح',
+      deletedStoreId: storeId
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'حدث خطأ أثناء محاولة حذف المتجر', details: error.message });
   }
 });
 

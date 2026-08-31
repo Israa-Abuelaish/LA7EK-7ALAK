@@ -7,138 +7,34 @@ const prisma = new PrismaClient();
 const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.mailtrap.io',
-  port: process.env.EMAIL_PORT || 2525,
+  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.EMAIL_PORT) || 587,
+  secure: false, 
   auth: {
     user: process.env.EMAIL_USER || '',
     pass: process.env.EMAIL_PASS || ''
+  },
+  tls: {
+    rejectUnauthorized: false
   }
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'la7ek7alak_secret_key';
 
 
-// ==========================================
-// 1. لوحة تحكم الأدمن (React Endpoints)
-// ==========================================
-
-// POST /api/admin/login: تسجيل دخول الأدمن
-router.post('/admin/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const admin = await prisma.user.findUnique({ where: { email } });
-    
-    if (!admin || admin.role !== 'admin') {
-      return res.status(403).json({ error: 'غير مسجل كأدمن أو الحساب غير موجود' });
-    }
-
-    const isMatch = await bcrypt.compare(password, admin.password);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'كلمة المرور غير صحيحة' });
-    }
-
-    const token = jwt.sign({ id: admin.id, email: admin.email, role: admin.role }, JWT_SECRET, { expiresIn: '1d' });
-    res.status(200).json({ message: 'تم تسجيل دخول الأدمن بنجاح', token, admin });
-  } catch (error) {
-    res.status(500).json({ error: 'خطأ في السيرفر', details: error.message });
-  }
-});
-
-// POST /api/admin/merchants: إنشاء تاجر ومتجر جديد
-router.post('/admin/merchants', async (req, res) => {
-  try {
-    const { fullName, email, password, phone, storeName, categoryId, cityId } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const result = await prisma.$transaction(async (prisma) => {
-      const newMerchant = await prisma.user.create({
-        data: {
-          fullName,
-          email,
-          phone,
-          password: hashedPassword,
-          role: 'merchant',
-          status: 'active'
-        }
-      });
-
-      const newStore = await prisma.store.create({
-        data: {
-          name: storeName,
-          userId: newMerchant.id,
-          categoryId: parseInt(categoryId),
-          cityId: parseInt(cityId)
-        }
-      });
-
-      return { newMerchant, newStore };
-    });
-
-    res.status(201).json({ message: 'تم إنشاء التاجر والمتجر بنجاح', data: result });
-  } catch (error) {
-    res.status(500).json({ error: 'فشل إنشاء التاجر', details: error.message });
-  }
-});
-
-// GET /api/admin/merchants: جلب قائمة التجار مع الفلترة (المنطقة أو التصنيف)
-router.get('/admin/merchants', async (req, res) => {
-  try {
-    const { cityId, categoryId } = req.query;
-    const storeFilter = {};
-    if (cityId) storeFilter.cityId = parseInt(cityId);
-    if (categoryId) storeFilter.categoryId = parseInt(categoryId);
-
-    const merchants = await prisma.user.findMany({
-      where: {
-        role: 'merchant',
-        stores: { some: storeFilter }
-      },
-      include: {
-        stores: {
-          include: { city: true, category: true }
-        }
-      }
-    });
-
-    res.status(200).json({ success: true, count: merchants.length, merchants });
-  } catch (error) {
-    res.status(500).json({ error: 'فشل جلب التجار', details: error.message });
-  }
-});
-
-// PATCH /api/admin/merchants/:id/status: تغيير حالة حساب التاجر (تفعيل / إيقاف)
-router.patch('/admin/merchants/:id/status', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body; // active أو inactive
-
-    if (!['active', 'inactive'].includes(status)) {
-      return res.status(400).json({ error: 'الحالة غير صالحة، يجب أن تكون active أو inactive' });
-    }
-
-    const updated = await prisma.user.update({
-      where: { id: parseInt(id) },
-      data: { status }
-    });
-
-    res.status(200).json({ message: 'تم تحديث حالة التاجر بنجاح', merchant: updated });
-  } catch (error) {
-    res.status(500).json({ error: 'فشل التحديث', details: error.message });
-  }
-});
-
-
-// ==========================================
-// 2. تطبيق الجوال (Flutter Endpoints)
-// ==========================================
-
 // تسجيل حساب جديد (مستهلك أو تاجر)
 router.post('/register', async (req, res) => {
+  console.log("البيانات المستقبلة من التطبيق:", req.body);
   try {
     const { fullName, email, phone, password } = req.body;
 
     if (!fullName || !email || !phone || !password) {
       return res.status(400).json({ error: 'الرجاء إدخال جميع الحقول المطلوبة' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'صيغة البريد الإلكتروني غير صحيحة' });
     }
 
     const phoneRegex = /^0[0-9]{9}$/;
@@ -147,8 +43,14 @@ router.post('/register', async (req, res) => {
         error: 'رقم الهاتف غير صالح. يجب أن يتكون من 10 خانات ويبدأ بالرقم 0' 
       });
     }
-    
-   const hashedPassword = await bcrypt.hash(password, 10);
+
+    // التحقق إن كان البريد مستخدماً مسبقاً
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'البريد الإلكتروني مستخدم بالفعل' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = await prisma.user.create({
       data: {
@@ -160,13 +62,14 @@ router.post('/register', async (req, res) => {
       }
     });
 
-   res.status(201).json({
+    res.status(201).json({
       message: 'تم إنشاء الحساب بنجاح',
       user: { id: newUser.id, fullName: newUser.fullName, email: newUser.email, phone: newUser.phone, role: newUser.role }
     });
 
-    } catch (error) {
-    res.status(500).json({ error: 'فشل إنشاء الحساب، البريد الإلكتروني قد يكون مستخدماً مسبقاً', details: error.message });
+  } catch (error) {
+    console.error("REGISTER ERROR:", error);
+    res.status(500).json({ error: 'فشل إنشاء الحساب', details: error.message });
   }
 });
 
@@ -225,31 +128,6 @@ router.delete('/admin/users/:id', async (req, res) => {
   }
 });
 
-// حذف متجر معين بشكل مستقل
-router.delete('/admin/stores/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const store = await prisma.store.findUnique({
-      where: { id: parseInt(id) }
-    });
-
-    if (!store) {
-      return res.status(404).json({ error: 'المتجر غير موجود' });
-    }
-
-    await prisma.store.delete({
-      where: { id: parseInt(id) }
-    });
-
-    res.status(200).json({
-      message: 'تم حذف المتجر بنجاح',
-      deletedStoreId: id
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'حدث خطأ أثناء محاولة حذف المتجر', details: error.message });
-  }
-});
 
 
 ////PASSWORD RECOVERY (استعادة كلمة المرور عبر OTP)
@@ -286,7 +164,7 @@ router.post('/forgot-password', async (req, res) => {
       subject: 'رمز استعادة كلمة المرور',
       html: `
         <div dir="rtl" style="font-family: Arial, sans-serif;">
-          <h3>مرحباً ${user.name}،</h3>
+          <h3>مرحباً ${user.name || 'مستخدمنا العزيز'}،</h3>
           <p>لقد طلبت استعادة كلمة المرور الخاصة بك في تطبيق <b>لاحق حالك</b>.</p>
           <p>رمز التحقق الخاص بك هو:</p>
           <h2 style="color: #4f46e5; letter-spacing: 2px;">${resetToken}</h2>
@@ -296,10 +174,10 @@ router.post('/forgot-password', async (req, res) => {
     });
 
     res.status(200).json({ message: 'تم إرسال رمز التحقق إلى بريدك الإلكتروني بنجاح' });
-  }catch (error) {
-  console.error("EMAIL ERROR:", error); // <-- أضف هذا السطر
-  res.status(500).json({ error: 'فشل إرسال رمز التحقق', details: error.message });
-}
+  } catch (error) {
+    console.error("EMAIL ERROR:", error);
+    res.status(500).json({ error: 'فشل إرسال رمز التحقق', details: error.message });
+  }
 });
 
 
