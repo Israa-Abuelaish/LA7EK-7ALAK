@@ -7,17 +7,6 @@ const nodemailer = require('nodemailer');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// إعداد Nodemailer 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com', 
-  port: 587,
-  secure: false, 
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  family: 4 
-});
 
 const JWT_SECRET = process.env.JWT_SECRET || 'la7ek7alak_secret_key';
 

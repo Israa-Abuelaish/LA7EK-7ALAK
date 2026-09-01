@@ -6,18 +6,80 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const nodemailer = require('nodemailer');
 
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+const JWT_SECRET = process.env.JWT_SECRET || 'la7ek7alak_secret_key';
+
+
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com', 
+  host: 'smtp.gmail.com',
   port: 587,
-  secure: false, 
+  secure: false, // يجب أن تكون false لأننا نستخدم البورت 587 مع STARTTLS
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  family: 4 
 });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'la7ek7alak_secret_key';
+
+const sendOtpEmail = async (toEmail, otpCode, userName) => {
+  try {
+    const mailOptions = {
+      from: `"لاحق حالك" <${process.env.EMAIL_USER}>`,
+      to: toEmail,
+      subject: 'رمز استعادة كلمة المرور',
+      html: `
+        <div dir="rtl" style="font-family: Arial, sans-serif;">
+          <h3>مرحباً ${userName || 'مستخدمنا العزيز'}،</h3>
+          <p>لقد طلبت استعادة كلمة المرور الخاصة بك في تطبيق <b>لاحق حالك</b>.</p>
+          <p>رمز التحقق الخاص بك هو:</p>
+          <h2 style="color: #4f46e5; letter-spacing: 2px;">${otpCode}</h2>
+          <p>هذا الرمز صالح لمدة <b> 5 دقائق فقط</b>.</p>
+        </div>
+      `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Email sent successfully:', info.messageId);
+    return true;
+  } catch (error) {
+    console.error('Error sending email with Gmail SMTP:', error);
+    throw error;
+  }
+};
+
+
+
+// const sendOtpEmail = async (toEmail, otpCode, userName) => {
+//   try {
+//     const { data, error } = await resend.emails.send({
+//       from: 'onboarding@resend.dev', 
+//       to: [toEmail],
+//       subject: 'رمز استعادة كلمة المرور',
+//       html: `
+//         <div dir="rtl" style="font-family: Arial, sans-serif;">
+//           <h3>مرحباً ${userName || 'مستخدمنا العزيز'}،</h3>
+//           <p>لقد طلبت استعادة كلمة المرور الخاصة بك في تطبيق <b>لاحق حالك</b>.</p>
+//           <p>رمز التحقق الخاص بك هو:</p>
+//           <h2 style="color: #4f46e5; letter-spacing: 2px;">${otpCode}</h2>
+//           <p>هذا الرمز صالح لمدة <b>5 دقائق فقط</b>.</p>
+//         </div>
+//       `
+//     });
+
+//     if (error) {
+//       console.error('Resend API Error:', error);
+//       throw new Error(error.message);
+//     }
+
+//     return true;
+//   } catch (err) {
+//     console.error('Failed to send email:', err.message);
+//     throw err;
+//   }
+// };
+
 
 
 // تسجيل حساب جديد (مستهلك أو تاجر)
@@ -147,7 +209,7 @@ router.post('/forgot-password', async (req, res) => {
 
     // توليد رمز عشوائي من 6 أرقام
     const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
-    const tokenExpiry = new Date(Date.now() + 10 * 60 * 1000); // صالح لمدة 10 دقائق فقط
+    const tokenExpiry = new Date(Date.now() + 5 * 60 * 1000); // صالح لمدة 5 دقائق فقط
 
     // حفظ الرمز وتاريخ انتهاء الصلاحية في قاعدة البيانات
     await prisma.user.update({
@@ -155,21 +217,8 @@ router.post('/forgot-password', async (req, res) => {
       data: { resetToken, tokenExpiry }
     });
 
-    // إرسال البريد الإلكتروني
-    await transporter.sendMail({
-      from: '"تطبيق لاحق حالك" <support@la7ek7alak.com>',
-      to: email,
-      subject: 'رمز استعادة كلمة المرور',
-      html: `
-        <div dir="rtl" style="font-family: Arial, sans-serif;">
-          <h3>مرحباً ${user.name || 'مستخدمنا العزيز'}،</h3>
-          <p>لقد طلبت استعادة كلمة المرور الخاصة بك في تطبيق <b>لاحق حالك</b>.</p>
-          <p>رمز التحقق الخاص بك هو:</p>
-          <h2 style="color: #4f46e5; letter-spacing: 2px;">${resetToken}</h2>
-          <p>هذا الرمز صالح لمدة <b>10 دقائق فقط</b>.</p>
-        </div>
-      `
-    });
+    // استخدام دالة الإرسال عبر Resend التي أنشأناها بالأعلى
+    await sendOtpEmail(email, resetToken, user.fullName);
 
     res.status(200).json({ message: 'تم إرسال رمز التحقق إلى بريدك الإلكتروني بنجاح' });
   } catch (error) {
