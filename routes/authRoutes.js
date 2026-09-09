@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 
 // 1. تسجيل حساب جديد (للزبائن فقط)
 router.post('/register', async (req, res) => {
+  console.log("🔥 تم استقبال طلب تسجيل جديد!", req.body); // أضف هذه هنا
   try {
     const { name, email, password, phone, address } = req.body;
 
