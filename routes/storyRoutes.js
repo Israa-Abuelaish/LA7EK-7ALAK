@@ -1,84 +1,95 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
-
 const router = express.Router();
-const prisma = new PrismaClient();
+const prisma = require('../config/prisma');
 
-// ==========================================
-// 1. نشر قصة أو عرض جديد (مخصص للتاجر المرتبط بمتجر)
-// ==========================================
-router.post('/', async (req, res) => {
+// 1. إضافة ستوري جديدة من قبل التاجر (تختفي بعد 24 ساعة)
+router.post('/addstories', async (req, res) => {
   try {
-   
-    const { storeId, mediaUrl, caption } = req.body;
+    const { merchantId, mediaUrl, description, discountPercentage } = req.body;
 
-    if (!storeId || !mediaUrl) {
-      return res.status(400).json({ error: 'الرجاء إدخال معرف المتجر ورابط الوسائط (الصورة/الفيديو)' });
-    }
-
-    // التحقق من أن المتجر موجود
-    const store = await prisma.store.findUnique({ where: { id: parseInt(storeId) } });
-    if (!store) {
-      return res.status(404).json({ error: 'المتجر غير موجود' });
-    }
-
-    // إنشاء القصة في قاعدة البيانات (تنتهي غالباً خلال 24 ساعة افتراضياً)
+    // حساب وقت الانتهاء بعد 24 ساعة بدقة
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    const newStory = await prisma.story.create({
+    const story = await prisma.story.create({
       data: {
-        storeId: parseInt(storeId),
+        merchantId: parseInt(merchantId),
         mediaUrl,
-        caption: caption || '',
-        expiresAt
+        description,
+        discountPercentage: discountPercentage ? parseFloat(discountPercentage) : null,
+        expiresAt,
+        status: 'active'
       }
     });
 
-    res.status(201).json({
-      message: 'تم نشر القصة بنجاح',
-      data: newStory
+    res.status(201).json({ message: 'تم نشر الستوري بنجاح وستبقى لمدة 24 ساعة', story });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. جلب الستوريات الحية فقط (التي لم ينقضِ عليها 24 ساعة)
+router.get('/active', async (req, res) => {
+  try {
+    const now = new Date();
+    const activeStories = await prisma.story.findMany({
+      where: {
+        expiresAt: { gt: now },
+        status: 'active'
+      },
+      include: {
+        merchant: {
+          include: {
+            user: true,
+            subscriptions: { where: { status: 'active' } }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
+    res.json(activeStories);
   } catch (error) {
-    res.status(500).json({ error: 'فشل نشر القصة', details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
 
-// ==========================================
-// 2. جلب جميع القصص النشطة (مخصص لتطبيق المستهلكين - Flutter)
-// ==========================================
-router.get('/', async (req, res) => {
+// 3. حذف ستوري من قبل التاجر أو الأدمن
+router.delete('/:id', async (req, res) => {
   try {
-    const now = new Date();
+    const storyId = parseInt(req.params.id);
+    const { userId, role } = req.body; 
 
-    // جلب القصص التي لم تنتهي صلاحيتها بعد (expiresAt أكبر من الوقت الحالي)
-    const activeStories = await prisma.story.findMany({
-      where: {
-        expiresAt: {
-          gt: now
-        }
-      },
+    // 1. البحث عن الستوري للتأكد من وجودها ومعرفة التاجر المرتبط بها
+    const story = await prisma.story.findUnique({
+      where: { id: storyId },
       include: {
-        store: { // جلب تفاصيل المتجر التابع له القصة (مثل اسم المتجر وصورته)
-          include: {
-            city: true,
-            category: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc' // ترتيبها من الأحدث للأقدم
+        merchant: true // لجلب بيانات التاجر المرتبط بالقصة
       }
     });
 
-    res.status(200).json({
-      count: activeStories.length,
-      data: activeStories
+    if (!story) {
+      return res.status(404).json({ error: 'القصة غير موجودة' });
+    }
+
+    // 2. التحقق من صلاحيات الحذف:
+    // هل المستخدم هو الأدمن؟ أم هل هو نفس التاجر مالك المتجر الذي أنشأ الستوري؟
+    const isAdmin = role === 'admin';
+    const isOwnerMerchant = role === 'merchant' && story.merchant.userId === parseInt(userId);
+
+    if (!isAdmin && !isOwnerMerchant) {
+      return res.status(403).json({ error: 'ليس لديك الصلاحية لحذف هذه القصة' });
+    }
+
+    // 3. تنفيذ الحذف النهائي من قاعدة البيانات
+    await prisma.story.delete({
+      where: { id: storyId }
     });
 
+
+    res.json({ message: 'تم حذف القصة بنجاح' });
   } catch (error) {
-    res.status(500).json({ error: 'فشل جلب القصص', details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 

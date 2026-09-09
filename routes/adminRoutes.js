@@ -1,231 +1,171 @@
 const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
-const nodemailer = require('nodemailer');
-
 const router = express.Router();
-const prisma = new PrismaClient();
+const prisma = require('../config/prisma');
+const bcrypt = require('bcryptjs');
 
-
-const JWT_SECRET = process.env.JWT_SECRET || 'la7ek7alak_secret_key';
-
-// ==========================================
-// 1. ADMIN DASHBOARD (لوحة تحكم الأدمن)
-// ==========================================
-
-// أ) تسجيل دخول الأدمن
-router.post('/admin/login', async (req, res) => {
+// 1. لوحة تحكم الأدمن (الإحصائيات)
+router.get('/dashboard-stats', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const user = await prisma.user.findUnique({ where: { email } });
+    const storesCount = await prisma.store.count();
+    const customersCount = await prisma.user.count({ where: { role: 'customer' } });
+    const merchantsCount = await prisma.user.count({ where: { role: 'merchant' } });
+    const storiesCount = await prisma.story.count({ where: { status: 'active' } });
 
-    if (!user || user.role !== 'admin') {
-      return res.status(403).json({ error: 'غير مسموح لك بالدخول كأدمن' });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ error: 'كلمة المرور غير صحيحة' });
-
-    const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
-    res.status(200).json({ message: 'تم تسجيل دخول الأدمن بنجاح', token });
+    res.json({
+      storesCount,
+      customersCount,
+      merchantsCount,
+      storiesCount
+    });
   } catch (error) {
-    res.status(500).json({ error: 'خطأ في تسجيل دخول الأدمن', details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// ب) إنشاء تاجر ومتجر (حصرياً للأدمن)
-router.post('/admin/merchants', async (req, res) => {
+// 2. الأدمن يضيف مستخدم جديد (سواء تاجر مع متجره أو زبون)
+router.post('/users', async (req, res) => {
   try {
-    const { fullName, email, password, phone, storeName, categoryId, cityId } = req.body;
+    const { name, email, password, role, phone, storeData } = req.body; // استقبال الـ phone
 
-    if (!fullName || !email || !password || !phone || !storeName || !categoryId || !cityId) {
-      return res.status(400).json({ error: 'الرجاء إدخال جميع الحقول المطلوبة للتاجر والمتجر' });
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'البريد الإلكتروني موجود مسبقاً' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // استخدام المعاملات (Transaction) لضمان إنشاء التاجر ومتجره معاً
-    const result = await prisma.$transaction(async (prisma) => {
-      const newMerchant = await prisma.user.create({
-        data: {
-          fullName,
-          email,
-          password: hashedPassword,
-          phone, 
-          role: 'merchant',
-          status: 'active'
-        }
-      });
+    let userData = {
+      name,
+      email,
+      password: hashedPassword,
+      phone, 
+      role: role || 'merchant'
+    };
 
-      const newStore = await prisma.store.create({
-        data: {
-          name: storeName,
-          userId: newMerchant.id,
-          categoryId: parseInt(categoryId),
-          cityId: parseInt(cityId)
-        }
-      });
-
-      return { newMerchant, newStore };
-    });
-
-    res.status(201).json({
-      message: 'تم إنشاء حساب التاجر والمتجر بنجاح',
-      data: result
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'فشل إنشاء التاجر والمتجر', details: error.message });
-  }
-});
-
-
-
-// ج) جلب قائمة التجار مع الفلترة
-router.get('/admin/merchants', async (req, res) => {
-  try {
-    const { cityId, categoryId, status } = req.query;
-
-    const filters = { role: 'merchant' };
-    if (status) filters.status = status;
-
-    const merchants = await prisma.user.findMany({
-      where: filters,
-      include: {
-        stores: {
-          where: {
-            ...(cityId && { cityId: parseInt(cityId) }),
-            ...(categoryId && { categoryId: parseInt(categoryId) })
-          },
-          include: { category: true, city: true }
-        }
-      }
-    });
-
-    // تصفية المستخدمين الذين لديهم متاجر مطابقة للفلتر
-    const filteredMerchants = merchants.filter(m => m.stores.length > 0);
-
-    res.status(200).json({ count: filteredMerchants.length, data: filteredMerchants });
-  } catch (error) {
-    res.status(500).json({ error: 'فشل جلب قائمة التجار', details: error.message });
-  }
-});
-
-
-// د) تغيير حالة التاجر (تفعيل / إيقاف)
-router.patch('/admin/merchants/:id/status', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body; // 'active' أو 'inactive'
-
-    if (!['active', 'inactive'].includes(status)) {
-      return res.status(400).json({ error: 'الحالة المدخلة غير صالحة' });
-    }
-
-    const updatedMerchant = await prisma.user.update({
-      where: { id: parseInt(id) },
-      data: { status }
-    });
-
-    res.status(200).json({
-      message: 'تم تحديث حالة التاجر بنجاح',
-      data: { id: updatedMerchant.id, fullName: updatedMerchant.fullName, email: updatedMerchant.email, status: updatedMerchant.status }
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'فشل تحديث حالة التاجر', details: error.message });
-  }
-});
-
-
-
-
-// GET /api/admin/filter-users: فلترة متقدمة للمستخدمين والتجار
-router.get('/admin/filter-users', async (req, res) => {
-  console.log("الـ Query المستلمة من الرابط:", req.query);
-  try {
-    const { role, status, cityId, categoryId, search } = req.query;
-
-    // بناء كائن الشروط الأساسي
-    let whereCondition = {};
-
-    // 1. فلترة حسب الدور (مثل 'customer' أو 'merchant' أو 'admin')
-    if (role) {
-      whereCondition.role = role;
-    }
-
-    // 2. فلترة حسب حالة الحساب (مثل 'active' أو 'inactive')
-    if (status) {
-      whereCondition.status = status;
-    }
-
-    // 3. فلترة نصية عامة (بالاسم أو البريد الإلكتروني)
-    if (search) {
-      whereCondition.OR = [
-        { fullName: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } }
-      ];
-    }
-
-    // 4. إذا كانت الفلترة تتعلق بالمتاجر (المدينة أو التصنيف)
-    if (cityId || categoryId) {
-      whereCondition.stores = {
-        some: {
-          ...(cityId && { cityId: parseInt(cityId) }),
-          ...(categoryId && { categoryId: parseInt(categoryId) })
+    if (role === 'merchant') {
+      userData.merchantProfile = {
+        create: {
+          storeName: storeData.storeName,
+          commercialNo: storeData.commercialNo,
+          wallet: { create: { balance: 0.0 } }
         }
       };
     }
 
-    // تنفيذ الاستعلام عبر Prisma مع جلب تفاصيل المتاجر إن وجدت
-   const results = await prisma.user.findMany({
-      where: whereCondition,
-      include: {
-        stores: {
-          include: {
-            city: true,
-            category: true 
-          }
+    const newUser = await prisma.user.create({
+      data: userData,
+      include: { merchantProfile: true, customerProfile: true }
+    });
+
+    if (role === 'merchant' && storeData && newUser.merchantProfile) {
+      await prisma.store.create({
+        data: {
+          name: storeData.storeName,
+          description: storeData.description,
+          userId: newUser.id,
+          categoryId: parseInt(storeData.categoryId),
+          cityId: parseInt(storeData.cityId)
         }
-      }
-    });
+      });
+    }
 
-    res.status(200).json({
-      success: true,
-      count: results.length,
-      data: results
-    });
-
+    res.status(201).json({ message: 'تم إنشاء المستخدم بنجاح بواسطة الأدمن', newUser });
   } catch (error) {
-    console.error("FILTER ERROR:", error);
-    res.status(500).json({ error: 'فشل عملية التصفية', details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
 
-
-// حذف متجر معين بشكل مستقل
-router.delete('/admin/stores/:id', async (req, res) => {
+// 3. حذف تاجر أو زبون
+router.delete('/users/:id', async (req, res) => {
   try {
-    const storeId = parseInt(req.params.id);
+    const userId = parseInt(req.params.id);
 
-    const store = await prisma.store.findUnique({
-      where: { id: storeId }
+    // التصحيح هنا: تمرير المتغير userId مباشرة بالطريقة الصحيحة لـ Prisma
+    const user = await prisma.user.findUnique({
+      where: { id: userId }, 
+      include: { 
+        merchantProfile: true, 
+        customerProfile: true 
+      }
     });
 
-    if (!store) {
-      return res.status(404).json({ error: 'المتجر غير موجود' });
+    if (!user) {
+      return res.status(404).json({ error: 'المستخدم غير موجود' });
     }
 
-    await prisma.store.delete({
-      where: { id: storeId }
+    await prisma.user.delete({
+      where: { id: userId }
     });
 
-    res.status(200).json({
-      message: 'تم حذف المتجر بنجاح',
-      deletedStoreId: storeId
+    res.json({ message: 'تم حذف المستخدم وجميع البيانات المرتبطة به بنجاح' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. إضافة تصنيف جديد
+router.post('/categories', async (req, res) => {
+  try {
+    const { name, icon } = req.body;
+
+    // 1. البحث عما إذا كان التصنيف موجوداً مسبقاً بالاسم
+    let category = await prisma.category.findUnique({
+      where: { name: name }
+    });
+
+    if (category) {
+      // إذا كان موجوداً، نقوم بتحديث الأيقونة أو الاسم إن أردت
+      category = await prisma.category.update({
+        where: { id: category.id },
+        data: { icon: icon || category.icon }
+      });
+      return res.json({ message: 'التصنيف موجود مسبقاً، تم تحديثه بنجاح', category });
+    }
+
+    // 2. إذا لم يكن موجوداً، نقوم بإنشائه جديداً
+    category = await prisma.category.create({
+      data: { name, icon }
+    });
+
+    res.status(201).json({ message: 'تم إضافة التصنيف بنجاح', category });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. حذف تصنيف
+router.delete('/categories/:id', async (req, res) => {
+  try {
+    const categoryId = parseInt(req.params.id);
+    await prisma.category.delete({ where: { id: categoryId } });
+    res.json({ message: 'تم حذف التصنيف بنجاح' });
+  } catch (error) {
+    res.status(500).json({ error: 'لا يمكن حذف التصنيف لوجود متاجر مرتبطة به' });
+  }
+});
+
+// 6. جلب جميع المستخدمين للتطبيق والداشبورد
+router.get('/users', async (req, res) => {
+  try {
+    // جلب العدد الإجمالي للمستخدمين
+    const totalUsers = await prisma.user.count();
+
+    // جلب قائمة جميع المستخدمين مع بياناتهم الشخصية
+    const users = await prisma.user.findMany({
+      include: { 
+        customerProfile: true, 
+        merchantProfile: true 
+      },
+      orderBy: { createdAt: 'desc' } 
+    });
+
+    res.json({
+      count: totalUsers,
+      users: users
     });
   } catch (error) {
-    res.status(500).json({ error: 'حدث خطأ أثناء محاولة حذف المتجر', details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 

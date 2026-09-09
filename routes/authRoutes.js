@@ -1,296 +1,134 @@
+// routes/authRoutes.js
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcrypt');
+const prisma = require('../config/prisma');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
-const nodemailer = require('nodemailer');
 
-const { Resend } = require('resend');
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-const JWT_SECRET = process.env.JWT_SECRET || 'la7ek7alak_secret_key';
-
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // يجب أن تكون false لأننا نستخدم البورت 587 مع STARTTLS
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-
-const sendOtpEmail = async (toEmail, otpCode, userName) => {
-  try {
-    const mailOptions = {
-      from: `"لاحق حالك" <${process.env.EMAIL_USER}>`,
-      to: toEmail,
-      subject: 'رمز استعادة كلمة المرور',
-      html: `
-        <div dir="rtl" style="font-family: Arial, sans-serif;">
-          <h3>مرحباً ${userName || 'مستخدمنا العزيز'}،</h3>
-          <p>لقد طلبت استعادة كلمة المرور الخاصة بك في تطبيق <b>لاحق حالك</b>.</p>
-          <p>رمز التحقق الخاص بك هو:</p>
-          <h2 style="color: #4f46e5; letter-spacing: 2px;">${otpCode}</h2>
-          <p>هذا الرمز صالح لمدة <b> 5 دقائق فقط</b>.</p>
-        </div>
-      `,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Email sent successfully:', info.messageId);
-    return true;
-  } catch (error) {
-    console.error('Error sending email with Gmail SMTP:', error);
-    throw error;
-  }
-};
-
-
-
-// const sendOtpEmail = async (toEmail, otpCode, userName) => {
-//   try {
-//     const { data, error } = await resend.emails.send({
-//       from: 'onboarding@resend.dev', 
-//       to: [toEmail],
-//       subject: 'رمز استعادة كلمة المرور',
-//       html: `
-//         <div dir="rtl" style="font-family: Arial, sans-serif;">
-//           <h3>مرحباً ${userName || 'مستخدمنا العزيز'}،</h3>
-//           <p>لقد طلبت استعادة كلمة المرور الخاصة بك في تطبيق <b>لاحق حالك</b>.</p>
-//           <p>رمز التحقق الخاص بك هو:</p>
-//           <h2 style="color: #4f46e5; letter-spacing: 2px;">${otpCode}</h2>
-//           <p>هذا الرمز صالح لمدة <b>5 دقائق فقط</b>.</p>
-//         </div>
-//       `
-//     });
-
-//     if (error) {
-//       console.error('Resend API Error:', error);
-//       throw new Error(error.message);
-//     }
-
-//     return true;
-//   } catch (err) {
-//     console.error('Failed to send email:', err.message);
-//     throw err;
-//   }
-// };
-
-
-
-// تسجيل حساب جديد (مستهلك أو تاجر)
+// 1. تسجيل حساب جديد (للزبائن فقط)
 router.post('/register', async (req, res) => {
-  console.log("البيانات المستقبلة من التطبيق:", req.body);
   try {
-    const { fullName, email, phone, password } = req.body;
+    const { name, email, password, phone, address } = req.body; // استقبال الـ phone
 
-    if (!fullName || !email || !phone || !password) {
-      return res.status(400).json({ error: 'الرجاء إدخال جميع الحقول المطلوبة' });
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'صيغة البريد الإلكتروني غير صحيحة' });
-    }
-
-    const phoneRegex = /^0[0-9]{9}$/;
-    if (!phoneRegex.test(phone)) {
-      return res.status(400).json({ 
-        error: 'رقم الهاتف غير صالح. يجب أن يتكون من 10 خانات ويبدأ بالرقم 0' 
-      });
-    }
-
-    // التحقق إن كان البريد مستخدماً مسبقاً
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({ error: 'البريد الإلكتروني مستخدم بالفعل' });
+      return res.status(400).json({ error: 'البريد الإلكتروني مستخدم مسبقاً' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = await prisma.user.create({
       data: {
-        fullName,
+        name,
         email,
-        phone,
         password: hashedPassword,
-        role: 'customer'
-      }
+        phone,
+        role: 'customer',
+        customerProfile: {
+          create: {
+            address 
+          }
+        }
+      },
+      include: { customerProfile: true }
     });
 
-    res.status(201).json({
-      message: 'تم إنشاء الحساب بنجاح',
-      user: { id: newUser.id, fullName: newUser.fullName, email: newUser.email, phone: newUser.phone, role: newUser.role }
-    });
-
+    res.status(201).json({ message: 'تم إنشاء الحساب بنجاح', user: newUser });
   } catch (error) {
-    console.error("REGISTER ERROR:", error);
-    res.status(500).json({ error: 'فشل إنشاء الحساب', details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
-
-// تسجيل الدخول لتطبيق الجوال
+// 2. تسجيل الدخول (لكل الأدوار: admin, merchant, customer)
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await prisma.user.findUnique({ where: { email } });
-
-    if (!user || user.status === 'inactive') {
-      return res.status(401).json({ error: 'الحساب غير موجود أو تم إيقافه من قبل الإدارة' });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'كلمة المرور غير صحيحة' });
-    }
-
-    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    res.status(200).json({ message: 'تم تسجيل الدخول بنجاح', token, user });
-  } catch (error) {
-    res.status(500).json({ error: 'خطأ في تسجيل الدخول', details: error.message });
-  }
-});
-
-
-
-// ==========================================
-// 3. مسارات الحذف للأدمن (Delete Endpoints)
-// ==========================================
-
-// حذف مستخدم معين (وسيتم حذف متجره المرتبط تلقائياً بفضل الـ Cascade)
-router.delete('/admin/users/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
 
     const user = await prisma.user.findUnique({
-      where: { id: parseInt(id) }
+      where: { email },
+      include: { customerProfile: true, merchantProfile: true }
     });
 
-    if (!user) {
-      return res.status(404).json({ error: 'المستخدم غير موجود' });
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' });
     }
 
-    await prisma.user.delete({
-      where: { id: parseInt(id) }
-    });
+    if (user.status !== 'active') {
+      return res.status(403).json({ error: 'هذا الحساب غير مفعل أو تم إيقافه' });
+    }
 
-    res.status(200).json({
-      message: 'تم حذف المستخدم (والمتجر المرتبط به إن وجد) بنجاح',
-      deletedUserId: id
+    const token = jwt.sign(
+      { userId: user.id, role: user.role },
+      process.env.JWT_SECRET || 'la7ek_secret_key',
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      message: 'تم تسجيل الدخول بنجاح',
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        profile: user.role === 'customer' ? user.customerProfile : user.merchantProfile
+      }
     });
   } catch (error) {
-    res.status(500).json({ error: 'حدث خطأ أثناء محاولة حذف المستخدم', details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
-
-
-////PASSWORD RECOVERY (استعادة كلمة المرور عبر OTP)
-// ==========================================
-// 1. طلب استعادة كلمة المرور (إرسال رمز الـ OTP)
-// ==========================================
+// 3. طلب استعادة كلمة المرور (إرسال رمز OTP وهمي أو حفظه)
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({ error: 'الرجاء إدخال البريد الإلكتروني' });
-    }
-
     const user = await prisma.user.findUnique({ where: { email } });
+
     if (!user) {
-      return res.status(404).json({ error: 'البريد الإلكتروني غير مسجل لدينا' });
+      return res.status(404).json({ error: 'البريد الإلكتروني غير موجود' });
     }
 
-    // توليد رمز عشوائي من 6 أرقام
-    const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
-    const tokenExpiry = new Date(Date.now() + 5 * 60 * 1000); // صالح لمدة 5 دقائق فقط
+    // توليد رمز OTP مكون من 4 أو 6 أرقام
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // صالح لمدة 15 دقيقة
 
-    // حفظ الرمز وتاريخ انتهاء الصلاحية في قاعدة البيانات
     await prisma.user.update({
       where: { email },
-      data: { resetToken, tokenExpiry }
+      data: { otpCode, otpExpiresAt }
     });
 
-    // استخدام دالة الإرسال عبر Resend التي أنشأناها بالأعلى
-    await sendOtpEmail(email, resetToken, user.fullName);
-
-    res.status(200).json({ message: 'تم إرسال رمز التحقق إلى بريدك الإلكتروني بنجاح' });
+    // هنا يتم إرسال الإيميل (يمكن ربطه بخدمة Nodemailer لاحقاً)
+    res.json({ message: 'تم إرسال رمز التحقق بنجاح', otpCode /* للإخفاء لاحقاً في الإنتاج */ });
   } catch (error) {
-    console.error("EMAIL ERROR:", error);
-    res.status(500).json({ error: 'فشل إرسال رمز التحقق', details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
-
-// ==========================================
-// 2. التحقق من صحة الرمز (Verify OTP)
-// ==========================================
-router.post('/verify-otp', async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-
-    if (!email || !otp) {
-      return res.status(400).json({ error: 'الرجاء إدخال البريد الإلكتروني ورمز التحقق' });
-    }
-
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      return res.status(404).json({ error: 'المستخدم غير موجود' });
-    }
-
-    // 1. التحقق من انتهاء الصلاحية أولاً
-    if (user.tokenExpiry && new Date() > new Date(user.tokenExpiry)) {
-      return res.status(400).json({ error: 'انتهت صلاحية رمز التحقق، يرجى طلب رمز جديد' });
-    }
-
-    // 2. ثم التحقق من مطابقة الرمز
-    if (user.resetToken !== otp) {
-      return res.status(400).json({ error: 'رمز التحقق غير صحيح' });
-    }
-
-    res.status(200).json({ 
-      success: true, 
-      message: 'تم التحقق من الرمز بنجاح، يمكنك الآن تعيين كلمة مرور جديدة' 
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'حدث خطأ أثناء التحقق', details: error.message });
-  }
-});
-
-
-// ==========================================
-// 3. إعادة تعيين كلمة المرور الجديدة (Reset Password)
-// ==========================================
+// 4. إعادة تعيين كلمة المرور باستخدام الـ OTP
 router.post('/reset-password', async (req, res) => {
   try {
-    const { email, newPassword } = req.body;
+    const { email, otpCode, newPassword } = req.body;
+    const user = await prisma.user.findUnique({ where: { email } });
 
-    if (!email || !newPassword) {
-      return res.status(400).json({ error: 'الرجاء إدخال البريد الإلكتروني وكلمة المرور الجديدة' });
+    if (!user || user.otpCode !== otpCode || new Date() > user.otpExpiresAt) {
+      return res.status(400).json({ error: 'رمز التحقق غير صحيح أو انتهت صلاحيته' });
     }
 
-    // تشفير كلمة المرور الجديدة
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // تحديث كلمة المرور وتفريغ حقول الـ Token حتى لا تُستخدم مرة أخرى
     await prisma.user.update({
       where: { email },
       data: {
         password: hashedPassword,
-        resetToken: null,
-        tokenExpiry: null
+        otpCode: null,
+        otpExpiresAt: null
       }
     });
 
-    res.status(200).json({ message: 'تم تحديث كلمة المرور بنجاح، يمكنك تسجيل الدخول الآن' });
+    res.json({ message: 'تم تحديث كلمة المرور بنجاح' });
   } catch (error) {
-    res.status(500).json({ error: 'فشل تحديث كلمة المرور', details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
