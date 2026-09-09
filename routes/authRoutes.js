@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 // 1. تسجيل حساب جديد (للزبائن فقط)
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, phone, address } = req.body; // استقبال الـ phone
+    const { name, email, password, phone, address } = req.body;
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
@@ -26,7 +26,7 @@ router.post('/register', async (req, res) => {
         role: 'customer',
         customerProfile: {
           create: {
-            address 
+            address: address 
           }
         }
       },
@@ -35,6 +35,7 @@ router.post('/register', async (req, res) => {
 
     res.status(201).json({ message: 'تم إنشاء الحساب بنجاح', user: newUser });
   } catch (error) {
+    console.error("Register Error:", error); // لتصديق الخطأ بدقة في الـ Logs
     res.status(500).json({ error: error.message });
   }
 });
