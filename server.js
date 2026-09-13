@@ -7,7 +7,7 @@ const app = express();
 
 // إعداد الـ CORS لربط Vercel بـ Railway
 const allowedOrigins = [
-  'https://la7ek-7alak.vercel.app', 
+  'https://la7ek7alak.vercel.app',   
   'http://localhost:3000',
   'http://localhost:5173'
 ];
