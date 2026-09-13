@@ -27,8 +27,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// هامة جداً لضمان التعامل السليم مع طلبات الـ OPTIONS المسبقة
-app.options('*', cors());
+
 
 app.use(express.json());
 
