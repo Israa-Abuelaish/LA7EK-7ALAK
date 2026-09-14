@@ -23,62 +23,6 @@ router.get('/dashboard-stats', async (req, res) => {
 });
 
 // 2. الأدمن يضيف مستخدم جديد (سواء تاجر مع متجره أو زبون)
-// router.post('/users', async (req, res) => {
-//   try {
-//     const { name, email, password, role, phone, storeData } = req.body; // استقبال الـ phone
-
-//     const existingUser = await prisma.user.findUnique({ where: { email } });
-//     if (existingUser) {
-//       return res.status(400).json({ error: 'البريد الإلكتروني موجود مسبقاً' });
-//     }
-
-//     const hashedPassword = await bcrypt.hash(password, 10);
-
-//     let userData = {
-//       name,
-//       email,
-//       password: hashedPassword,
-//       phone, 
-//       role: role || 'merchant'
-//     };
-
-//     if (role === 'merchant') {
-//       userData.merchantProfile = {
-//         create: {
-//           storeName: storeData.storeName,
-//           commercialNo: storeData.commercialNo,
-//           wallet: { create: { balance: 0.0 } }
-//         }
-//       };
-//     }
-
-//     const newUser = await prisma.user.create({
-//       data: userData,
-//       include: { merchantProfile: true, customerProfile: true }
-//     });
-
-//     if (role === 'merchant' && storeData && newUser.merchantProfile) {
-//       await prisma.store.create({
-//         data: {
-//           name: storeData.storeName,
-//           description: storeData.description,
-//           userId: newUser.id,
-//           categoryId: parseInt(storeData.categoryId),
-//           cityId: parseInt(storeData.cityId)
-//         }
-//       });
-//     }
-
-//     res.status(201).json({ message: 'تم إنشاء المستخدم بنجاح بواسطة الأدمن', newUser });
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// });
-
-
-
-
-// قم بتغيير /users إلى /merchants أو أضفه بالشكل التالي:
 router.post('/merchants', async (req, res) => {
   try {
     // استلام البيانات المرسلة من ملف merchantForm.jsx
