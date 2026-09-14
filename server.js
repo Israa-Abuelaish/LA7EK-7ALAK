@@ -23,7 +23,7 @@ app.use(cors({
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // السماح بـ OPTIONS بوضوح
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // السماح بـ OPTIONS بوضوح
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
