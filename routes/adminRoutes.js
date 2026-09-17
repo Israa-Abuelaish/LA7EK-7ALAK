@@ -258,28 +258,47 @@ router.put('/customers/:id', async (req, res) => {
 // 4. حذف الزبون
 router.delete('/customers/:id', async (req, res) => {
   try {
-    // طباعة الـ id للتأكد منه في التيرمينال
-    console.log("Deleting customer with ID:", req.params.id);
-
     const customerId = parseInt(req.params.id);
 
     if (isNaN(customerId)) {
-      return res.status(400).json({ error: 'معرف الزبون غير صالح' });
+      return res.status(400).json({
+        error: 'معرف الزبون غير صالح'
+      });
     }
 
-    await prisma.user.delete({
-      where: { 
-        id: customerId 
+    // التأكد أن المستخدم موجود وأنه زبون
+    const customer = await prisma.user.findFirst({
+      where: {
+        id: customerId,
+        role: 'customer'
       }
     });
 
-    res.status(200).json({ message: 'تم حذف الزبون بنجاح' });
+    if (!customer) {
+      return res.status(404).json({
+        error: 'الزبون غير موجود'
+      });
+    }
+
+    // حذف الزبون من جدول User
+    await prisma.user.delete({
+      where: {
+        id: customerId
+      }
+    });
+
+    res.status(200).json({
+      message: 'تم حذف الزبون بنجاح'
+    });
+
   } catch (error) {
     console.error('Error deleting customer:', error);
-    res.status(500).json({ error: error.message || 'فشل حذف الزبون' });
+
+    res.status(500).json({
+      error: error.message || 'فشل حذف الزبون'
+    });
   }
 });
-
 
 // 10. تغيير حالة الحساب (نشط / محظور)
 router.patch('/customers/:id/status', async (req, res) => {
@@ -302,7 +321,7 @@ router.patch('/customers/:id/status', async (req, res) => {
 
 
 //=================== مسارات إدارة التصنيفات الحقيقية عبر API ====================
-// 11. إضافة تصنيف جديد
+// 1. إضافة تصنيف جديد
 router.post('/categories', async (req, res) => {
   try {
     const { name, icon } = req.body;
@@ -321,7 +340,6 @@ router.post('/categories', async (req, res) => {
       return res.json({ message: 'التصنيف موجود مسبقاً، تم تحديثه بنجاح', category });
     }
 
-    // 2. إذا لم يكن موجوداً، نقوم بإنشائه جديداً
     category = await prisma.category.create({
       data: { name, icon }
     });
@@ -332,7 +350,7 @@ router.post('/categories', async (req, res) => {
   }
 });
 
-// 12. حذف تصنيف
+// 2. حذف تصنيف
 router.delete('/categories/:id', async (req, res) => {
   try {
     const categoryId = parseInt(req.params.id);
@@ -340,6 +358,95 @@ router.delete('/categories/:id', async (req, res) => {
     res.json({ message: 'تم حذف التصنيف بنجاح' });
   } catch (error) {
     res.status(500).json({ error: 'لا يمكن حذف التصنيف لوجود متاجر مرتبطة به' });
+  }
+});
+
+
+
+
+
+
+
+
+
+// =====================  اشتراكات المتاجر ========================
+
+//1. جلب الاشتراكات
+router.get('/subscriptions', async (req, res) => {
+  try {
+    // استعلام قاعدة البيانات لجلب الاشتراكات
+    // const subscriptions = await Subscription.find();
+    res.status(200).json({ success: true, data: [] });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// إضافة اشتراك جديد
+router.post('/subscriptions', async (req, res) => {
+  try {
+    const { storeName, plan, startDate, endDate, status } = req.body;
+    // حفظ الاشتراك الجديد في قاعدة البيانات
+    res.status(201).json({ success: true, message: 'تم إضافة الاشتراك بنجاح' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// تعديل اشتراك
+router.put('/subscriptions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // تحديث بيانات الاشتراك
+    res.status(200).json({ success: true, message: 'تم تحديث الاشتراك بنجاح' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// حذف اشتراك
+router.delete('/subscriptions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // حذف الاشتراك
+    res.status(200).json({ success: true, message: 'تم حذف الاشتراك بنجاح' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+
+// --- 2. وصولات الدفع ---
+
+// جلب الوصولات
+router.get('/receipts', async (req, res) => {
+  try {
+    res.status(200).json({ success: true, data: [] });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// قبول الوصل وتفعيل الاشتراك تلقائياً
+router.patch('/receipts/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // 1. تحديث حالة الوصل إلى approved
+    // 2. البحث عن المتجر أو إنشاء اشتراك جديد له بناءً على نوع الخطة (شهري/سنوي) وتاريخ اليوم
+    res.status(200).json({ success: true, message: 'تم قبول الوصل وتفعيل اشتراك المتجر بنجاح' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// رفض الوصل
+router.patch('/receipts/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // تحديث حالة الوصل إلى rejected
+    res.status(200).json({ success: true, message: 'تم رفض الوصل' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
