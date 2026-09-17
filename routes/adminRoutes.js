@@ -256,15 +256,23 @@ router.put('/customers/:id', async (req, res) => {
 });
 
 // 4. حذف الزبون
-router.delete('/customers/:id', async (req, res) => {
   try {
-    const customerId = req.params.id; // بدون parseInt إذا كان النص/UUID
-    console.log("Deleting customer with ID:", customerId);
+    const customerId = parseInt(req.params.id);
+
+    if (isNaN(customerId)) {
+      return res.status(400).json({ error: 'معرف الزبون غير صالح' });
+    }
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+    });
+
+    if (!customer) {
+      return res.status(404).json({ error: 'الزبون غير موجود' });
+    }
 
     await prisma.user.delete({
-      where: {
-        id: customerId 
-      },
+      where: { id: customer.userId },
     });
 
     res.status(200).json({ message: 'تم حذف الزبون بنجاح' });
