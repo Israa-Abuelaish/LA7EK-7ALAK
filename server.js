@@ -7,24 +7,25 @@ const app = express();
 
 // إعداد الـ CORS لربط Vercel بـ Railway
 const allowedOrigins = [
-  'https://la7ek7alak.vercel.app',    
-  'https://la7ek-7alak.vercel.app',   
+  'https://la7ek7alak.vercel.app',
+  'https://la7ek-7alak.vercel.app',
   'http://localhost:3000',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  'http://localhost:5175'
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // السماح للطلبات التي ليس لها origin (مثل Postman أو السيرفر الداخلي) أو الموجودة في القائمة
+    // السماح للطلبات التي ليس لها أصل (مثل Postman) أو الموجودة في المصفوفة
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // السماح بـ OPTIONS بوضوح
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
 
