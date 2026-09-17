@@ -255,35 +255,53 @@ router.put('/customers/:id', async (req, res) => {
   }
 });
 
-// 4. حذف الزبون
+// 10. حذف الزبون
+ router.delete('/customers/:id', async (req, res) => {
   try {
     const customerId = parseInt(req.params.id);
 
     if (isNaN(customerId)) {
-      return res.status(400).json({ error: 'معرف الزبون غير صالح' });
+      return res.status(400).json({
+        error: 'معرف الزبون غير صالح'
+      });
     }
 
-    const customer = await prisma.customer.findUnique({
-      where: { id: customerId },
+    // التأكد أن المستخدم موجود وأنه زبون
+    const customer = await prisma.user.findFirst({
+      where: {
+        id: customerId,
+        role: 'customer'
+      }
     });
 
     if (!customer) {
-      return res.status(404).json({ error: 'الزبون غير موجود' });
+      return res.status(404).json({
+        error: 'الزبون غير موجود'
+      });
     }
 
+    // حذف الزبون من جدول User
     await prisma.user.delete({
-      where: { id: customer.userId },
+      where: {
+        id: customerId
+      }
     });
 
-    res.status(200).json({ message: 'تم حذف الزبون بنجاح' });
+    res.status(200).json({
+      message: 'تم حذف الزبون بنجاح'
+    });
+
   } catch (error) {
     console.error('Error deleting customer:', error);
-    res.status(500).json({ error: error.message || 'فشل حذف الزبون' });
+
+    res.status(500).json({
+      error: error.message || 'فشل حذف الزبون'
+    });
   }
 });
 
 
-// 10. تغيير حالة الحساب (نشط / محظور)
+// 11. تغيير حالة الحساب (نشط / محظور)
 router.patch('/customers/:id/status', async (req, res) => {
   try {
     const customerId = parseInt(req.params.id);
@@ -304,7 +322,7 @@ router.patch('/customers/:id/status', async (req, res) => {
 
 
 //=================== مسارات إدارة التصنيفات الحقيقية عبر API ====================
-// 11. إضافة تصنيف جديد
+// 12. إضافة تصنيف جديد
 router.post('/categories', async (req, res) => {
   try {
     const { name, icon } = req.body;
@@ -334,7 +352,7 @@ router.post('/categories', async (req, res) => {
   }
 });
 
-// 12. حذف تصنيف
+// 13. حذف تصنيف
 router.delete('/categories/:id', async (req, res) => {
   try {
     const categoryId = parseInt(req.params.id);
