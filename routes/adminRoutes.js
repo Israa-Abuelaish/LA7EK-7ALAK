@@ -255,7 +255,7 @@ router.put('/customers/:id', async (req, res) => {
   }
 });
 
-// 4. حذف الزبون
+// 10. حذف الزبون
 router.delete('/customers/:id', async (req, res) => {
   try {
     const customerId = parseInt(req.params.id);
@@ -300,7 +300,7 @@ router.delete('/customers/:id', async (req, res) => {
   }
 });
 
-// 10. تغيير حالة الحساب (نشط / محظور)
+// 11. تغيير حالة الحساب (نشط / محظور)
 router.patch('/customers/:id/status', async (req, res) => {
   try {
     const customerId = parseInt(req.params.id);
