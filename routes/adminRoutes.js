@@ -258,19 +258,13 @@ router.put('/customers/:id', async (req, res) => {
 // 4. حذف الزبون
 router.delete('/customers/:id', async (req, res) => {
   try {
-    // طباعة الـ id للتأكد منه في التيرمينال
-    console.log("Deleting customer with ID:", req.params.id);
-
-    const customerId = parseInt(req.params.id);
-
-    if (isNaN(customerId)) {
-      return res.status(400).json({ error: 'معرف الزبون غير صالح' });
-    }
+    const customerId = req.params.id; // بدون parseInt إذا كان النص/UUID
+    console.log("Deleting customer with ID:", customerId);
 
     await prisma.user.delete({
-      where: { 
+      where: {
         id: customerId 
-      }
+      },
     });
 
     res.status(200).json({ message: 'تم حذف الزبون بنجاح' });
