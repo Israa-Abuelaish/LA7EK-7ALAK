@@ -255,7 +255,7 @@ router.put('/customers/:id', async (req, res) => {
   }
 });
 
-// 10. حذف الزبون
+// 4. حذف الزبون
 router.delete('/customers/:id', async (req, res) => {
   try {
     const customerId = parseInt(req.params.id);
@@ -300,7 +300,8 @@ router.delete('/customers/:id', async (req, res) => {
   }
 });
 
-// 11. تغيير حالة الحساب (نشط / محظور)
+
+// 10. تغيير حالة الحساب (نشط / محظور)
 router.patch('/customers/:id/status', async (req, res) => {
   try {
     const customerId = parseInt(req.params.id);
@@ -321,7 +322,7 @@ router.patch('/customers/:id/status', async (req, res) => {
 
 
 //=================== مسارات إدارة التصنيفات الحقيقية عبر API ====================
-// 1. إضافة تصنيف جديد
+// 11. إضافة تصنيف جديد
 router.post('/categories', async (req, res) => {
   try {
     const { name, icon } = req.body;
@@ -350,7 +351,7 @@ router.post('/categories', async (req, res) => {
   }
 });
 
-// 2. حذف تصنيف
+// 12. حذف تصنيف
 router.delete('/categories/:id', async (req, res) => {
   try {
     const categoryId = parseInt(req.params.id);
