@@ -1,172 +1,126 @@
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  }
-
 generator client {
   provider = "prisma-client-js"
 }
 
-enum Role {
-  admin
-  merchant
-  customer
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-// ==========================================
-// 1. جدول المستخدمين الأساسي (User Schema)
-// ==========================================
 model User {
-  id       Int    @id @default(autoincrement())
-  name     String
-  email    String @unique
-  password String
-  phone    String?
-  role     Role   @default(customer)
-
-  status String @default("active")
-
-  // حقول الـ OTP لاستعادة كلمة المرور أو التحقق
-  otpCode      String?
-  otpExpiresAt DateTime?
-
-  // العلاقات
+  id              Int            @id @default(autoincrement())
+  name            String
+  email           String         @unique
+  password        String
+  phone           String?
+  role            Role           @default(customer)
+  status          String         @default("active")
+  otpCode         String?
+  otpExpiresAt    DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
   customerProfile Customer?
   merchantProfile Merchant?
   notifications   Notification[]
   reports         Report[]       @relation("UserReports")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  Store     Store[]
+  Store           Store[]
 }
 
-// ==========================================
-// 2. جدول الزبائن (Customer Schema)
-// ==========================================
 model Customer {
-  id     Int  @id @default(autoincrement())
-  userId Int  @unique
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  phone   String?
-  address String?
-
-  // العلاقات
-  ratings Rating[]
-  follows Follow[]
-
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  phone     String?
+  address   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  follows   Follow[]
+  ratings   Rating[]
 }
 
-// ==========================================
-// 3. جدول التجار (Merchant Schema)
-// ==========================================
 model Merchant {
-  id     Int  @id @default(autoincrement())
-  userId Int  @unique
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  storeName    String
-  commercialNo String? // السجل التجاري أو رقم الترخيص
-
-  // العلاقات
-  stories       Story[]
+  id            Int             @id @default(autoincrement())
+  userId        Int             @unique
+  storeName     String
+  commercialNo  String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  cityId        BigInt?
+  city          Int?
+  followers     Follow[]
+  City          City?           @relation(fields: [city], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   wallet        MerchantWallet?
   ratings       Rating[]
-  followers     Follow[]
+  stories       Story[]
   subscriptions Subscription[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
-// ==========================================
-// 4. جدول التصنيفات (Category Schema)
-// ==========================================
 model Category {
   id     Int     @id @default(autoincrement())
   name   String  @unique
-  icon   String? // الأيقونة كما ظهرت في البيانات الوهمية
+  icon   String?
   stores Store[]
 }
 
-// ==========================================
-// 5. جدول المدن 
-// ==========================================
 model City {
-  id          Int     @id @default(autoincrement())
-  governorate String // المحافظة مثل: الوسطى، غزة
-  area        String // المنطقة مثل: النصيرات، الرمال
+  id          Int        @id @default(autoincrement())
+  governorate String
+  area        String
+  latitude    Float?
+  longitude   Float?
+  Merchant    Merchant[]
   stores      Store[]
 }
 
-// ==========================================
-// 5. جدول المتاجر
-// ==========================================
 model Store {
-  id          Int     @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   name        String
   description String?
-  visitCount  Int     @default(0) // عدد زيارات صفحة المتجر
-
-  userId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  categoryId Int
-  category   Category @relation(fields: [categoryId], references: [id])
-
-  cityId Int
-  city   City @relation(fields: [cityId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  stories Story[]
-  follows Follow[]
-  ratings Rating[]
+  visitCount  Int      @default(0)
+  userId      Int
+  categoryId  Int
+  cityId      Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  latitude    Float?
+  longitude   Float?
+  address     String?
+  follows     Follow[]
+  ratings     Rating[]
+  category    Category @relation(fields: [categoryId], references: [id])
+  city        City     @relation(fields: [cityId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stories     Story[]
 }
 
-// ==========================================
-// 6. جدول القصص والعروض (Story Schema)
-// ==========================================
 model Story {
-  id         Int      @id @default(autoincrement())
-  merchantId Int
-  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  mediaUrl           String // رابط الصورة أو الفيديو
-  description        String? // وصف القصة أو العرض
-  discountPercentage Float? // نسبة الخصم إن وجدت
-
-  status String @default("active") // active, expired, deleted_by_merchant, deleted_by_admin
-
-  expiresAt DateTime // تحديد وقت انتهاء الـ 24 ساعة
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  Store     Store?   @relation(fields: [storeId], references: [id])
-  storeId   Int?
+  id                 Int      @id @default(autoincrement())
+  merchantId         Int
+  mediaUrl           String
+  description        String?
+  discountPercentage Float?
+  status             String   @default("active")
+  expiresAt          DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  storeId            Int?
+  merchant           Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  Store              Store?   @relation(fields: [storeId], references: [id])
 }
 
-// ==========================================
-// 7. جدول التقييمات والمتابعات (Ratings & Follows Schemas)
-// ==========================================
 model Rating {
   id         Int      @id @default(autoincrement())
   customerId Int
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
   merchantId Int
+  rating     Int
+  review     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  storeId    Int?
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  rating Int // عدد النجوم (من 1 إلى 5)
-  review String? // تعليق الزبون
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  Store     Store?   @relation(fields: [storeId], references: [id])
-  storeId   Int?
+  Store      Store?   @relation(fields: [storeId], references: [id])
 
   @@unique([customerId, merchantId])
 }
@@ -174,98 +128,94 @@ model Rating {
 model Follow {
   id         Int      @id @default(autoincrement())
   customerId Int
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
   merchantId Int
+  createdAt  DateTime @default(now())
+  storeId    Int?
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  Store     Store?   @relation(fields: [storeId], references: [id])
-  storeId   Int?
+  Store      Store?   @relation(fields: [storeId], references: [id])
 
   @@unique([customerId, merchantId])
 }
 
-// ==========================================
-// 8. جدول الرصيد والمحافظ (MerchantWallet & Transaction Schemas)
-// ==========================================
 model MerchantWallet {
-  id         Int      @id @default(autoincrement())
-  merchantId Int      @unique
-  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  balance      Float         @default(0.0) // الرصيد الحالي
-  transactions Transaction[] // سجل العمليات
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int           @id @default(autoincrement())
+  merchantId   Int           @unique
+  balance      Float         @default(0.0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  merchant     Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
 }
 
 model Transaction {
-  id       Int            @id @default(autoincrement())
-  walletId Int
-  wallet   MerchantWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-
-  amount      Float // قيمة العملية (خصم، إيداع...)
-  type        String // نوع العملية (مثل: "deduction", "deposit")
-  description String? // تفاصيل العملية
-
-  createdAt DateTime @default(now())
+  id          Int            @id @default(autoincrement())
+  walletId    Int
+  amount      Float
+  type        String
+  description String?
+  createdAt   DateTime       @default(now())
+  wallet      MerchantWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 }
 
-// ==========================================
-// 9. جدول الاشتراكات والأمور المالية (Subscription Schema)
-// ==========================================
 model Subscription {
-  id         Int      @id @default(autoincrement())
-  merchantId Int
-  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  planName String // اسم الباقة (مثل: Gold, Silver)
-  price    Float // سعر الباقة
-
-  // التفاصيل المالية
-  paymentStatus String  @default("pending") // paid, pending, failed
-  paymentMethod String? // طريقة الدفع
-  transactionId String? // رقم مرجعي للعملية
-
-  startDate DateTime @default(now())
-  endDate   DateTime // تاريخ انتهاء الاشتراك
-  status    String   @default("active") // active, expired, canceled
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  merchantId    Int
+  planName      String
+  price         Float
+  paymentStatus String   @default("pending")
+  paymentMethod String?
+  transactionId String?
+  startDate     DateTime @default(now())
+  endDate       DateTime
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  merchant      Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 }
 
-// ==========================================
-// 10. جدول الإشعارات (Notification Schema)
-// ==========================================
 model Notification {
-  id     Int  @id @default(autoincrement())
-  userId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  title   String // عنوان الإشعار
-  message String // نص الإشعار
-  isRead  Boolean @default(false)
-  type    String? // نوع الإشعار
-
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  type      String?
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// ==========================================
-// 11. جدول التقارير والبلاغات (Report Schema)
-// ==========================================
 model Report {
-  id         Int  @id @default(autoincrement())
+  id         Int      @id @default(autoincrement())
   reporterId Int
-  reporter   User @relation("UserReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType String
+  targetId   Int
+  reason     String
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  reporter   User     @relation("UserReports", fields: [reporterId], references: [id], onDelete: Cascade)
+}
 
-  targetType String // نوع العنصر المبلغ عنه (مثل: "story", "merchant")
-  targetId   Int // معرف العنصر
-  reason     String // سبب البلاغ
-  status     String @default("pending") // pending, resolved, dismissed
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Receipt {
+  id            BigInt?
+  storeName     String?
+  ownerName     String?
+  amount        String?
+  plan          String?
+  transactionId String?
+  date          String?
+  receiptImg    String?
+  status        String?
+  created_at    DateTime? @db.Timestamptz(6)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  @@ignore
+}
+
+enum Role {
+  admin
+  merchant
+  customer
 }
